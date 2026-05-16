@@ -1,0 +1,202 @@
+/**
+ * -------------------------------------------------------
+ * File: index.css
+ * Purpose:
+ * Global stylesheet and Tailwind CSS entry point.
+ * Defines base element styles, smooth scrolling behaviour,
+ * font smoothing, and custom scrollbar styling.
+ *
+ * This file is loaded once at application startup and
+ * applies styles globally. It should contain only truly
+ * global styles — component‑specific styles belong in
+ * their respective component files or Tailwind utility
+ * classes.
+ *
+ * Sections:
+ * 1. Tailwind Directives — Import base, components, and utilities.
+ * 2. Base Layer — HTML/body defaults, font smoothing, smooth scroll.
+ * 3. Global Transitions — Subtle colour transitions on all elements.
+ * 4. Custom Scrollbar — Styled scrollbar for WebKit browsers.
+ *
+ * Design Decisions:
+ * - `scroll-behavior: smooth` on `<html>` makes anchor
+ *   links and `scrollTo` calls animate smoothly without
+ *   JavaScript.
+ * - Font smoothing (`-webkit-font-smoothing`, `-moz-osx-
+ *   font-smoothing`) improves text rendering on macOS and
+ *   makes fonts appear lighter and cleaner.
+ * - The universal `*` transition applies colour changes
+ *   globally so dark mode toggling feels seamless. It's
+ *   scoped to `transition-colors` to avoid animating
+ *   layout properties (width, height, position), which
+ *   would hurt performance.
+ * - The custom scrollbar uses Tailwind's `@apply` for
+ *   consistency with the design system and automatic dark
+ *   mode support.
+ *
+ * Browser Support:
+ * - Font smoothing: WebKit + Firefox (macOS only for Firefox).
+ * - Custom scrollbar: WebKit browsers (Chrome, Edge, Safari).
+ *   Firefox uses `scrollbar-width` and `scrollbar-color`,
+ *   which are not yet applied here (see future improvements).
+ *
+ * Important Notes:
+ * - The `*` transition may cause unexpected animations on
+ *   elements that change colour during initial page load.
+ *   If this becomes a problem, scope the transition to
+ *   specific properties or use the `motion-safe:` variant.
+ * - Custom scrollbar styles are non‑standard and may break
+ *   in future browser versions. They are progressive
+ *   enhancement — the browser's default scrollbar is a
+ *   perfectly acceptable fallback.
+ *
+ * Dependencies:
+ * - Tailwind CSS (v3+ with `@tailwind` directives)
+ * - Inter font (loaded separately via `<link>` or `@import`)
+ * -------------------------------------------------------
+ */
+
+/* ----------------------------------------------------------------------
+ * Tailwind Directives
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Injects Tailwind's base styles (normalize/reset),
+ * component classes, and utility classes into the
+ * stylesheet. These must be at the top of the file.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ----------------------------------------------------------------------
+ * Base Layer — HTML & Body Defaults
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Custom base styles applied on top of Tailwind's reset.
+ * Uses `@layer base` so Tailwind can properly order the
+ * generated CSS and respect the cascade.
+ */
+@layer base {
+  /**
+   * Smooth scrolling on the root element.
+   *
+   * Why `scroll-behavior: smooth`:
+   * - Anchor links (e.g., "#section") animate to their target.
+   * - `window.scrollTo({ behavior: 'smooth' })` works natively.
+   * - No JavaScript library required for basic smooth scroll.
+   *
+   * Note: This does not affect scroll containers within
+   * the page (e.g., chat panels). Those use the Tailwind
+   * `scroll-smooth` utility class where needed.
+   */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /**
+   * Body defaults: reset margin, set the primary font stack,
+   * and enable font smoothing for a cleaner appearance.
+   *
+   * Font Stack Priority:
+   * 1. 'Inter' — The primary brand font (loaded separately).
+   * 2. -apple-system — San Francisco on macOS/iOS.
+   * 3. BlinkMacSystemFont — San Francisco on Chrome macOS.
+   * 4. 'Segoe UI' — Windows system font.
+   * 5. Roboto — Android system font.
+   * 6. Oxygen, Ubuntu, Cantarell — Linux system fonts.
+   * 7. 'Open Sans', 'Helvetica Neue' — Fallbacks.
+   * 8. sans-serif — Ultimate browser fallback.
+   */
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+      Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue',
+      sans-serif;
+    /* Improve text rendering on macOS (lightens font weight visually) */
+    -webkit-font-smoothing: antialiased;
+    /* Improve text rendering on Firefox for macOS */
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /**
+   * Universal colour transition.
+   *
+   * Why this exists:
+   * Dark mode toggling changes background and text colours
+   * across the entire app. This single rule makes every
+   * colour change animate smoothly without needing to add
+   * `transition-colors` to every element individually.
+   *
+   * Why `transition-colors` and not `transition-all`:
+   * Animating `all` properties includes layout‑affecting
+   * properties (width, height, margin, padding), which
+   * triggers expensive layout recalculations. `transition-
+   * colors` only animates colour‑related properties (color,
+   * background-color, border-color, etc.), which are GPU‑
+   * accelerated and performant.
+   *
+   * Why `duration-200`:
+   * 200ms is fast enough to feel responsive but slow enough
+   * to be noticeable. It's the same duration used throughout
+   * the component library for consistency.
+   *
+   * Potential risk:
+   * Elements that programmatically change colour on first
+   * render may show a brief transition. If this occurs,
+   * add `transition-none` to those specific elements.
+   */
+  * {
+    @apply transition-colors duration-200;
+  }
+}
+
+/* ----------------------------------------------------------------------
+ * Custom Scrollbar (WebKit Browsers)
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Styled scrollbar for a more polished appearance.
+ *
+ * Why custom scrollbars:
+ * The default browser scrollbar can look out of place in a
+ * carefully designed UI. A minimal, rounded scrollbar that
+ * respects dark mode feels more integrated.
+ *
+ * Browser support:
+ * These pseudo‑elements only work in WebKit‑based browsers
+ * (Chrome, Edge, Safari, Opera). Firefox users will see
+ * their default scrollbar. This is progressive enhancement —
+ * the scrollbar is functional either way.
+ *
+ * Firefox note:
+ * Firefox supports `scrollbar-width: thin` and `scrollbar-
+ * color: ...` for styling. These are not included here but
+ * could be added for broader coverage.
+ */
+
+/**
+ * The scrollbar track — the background area the thumb slides along.
+ * Set to transparent so it blends with the container background.
+ */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+/**
+ * The scrollbar thumb — the draggable handle.
+ *
+ * - `bg-gray-300` in light mode, `dark:bg-gray-800` in dark mode.
+ * - `rounded-full` for a pill shape.
+ * - `transition-colors` for smooth colour changes on hover.
+ * - `hover:bg-gray-400` / `dark:hover:bg-gray-700` for
+ *   visual feedback when the user hovers over the thumb.
+ */
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-gray-800 rounded-full transition-colors hover:bg-gray-400 dark:hover:bg-gray-700;
+}
