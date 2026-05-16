@@ -132,6 +132,8 @@ connectDB();
 
 const app = express();
 
+
+app.set('trust proxy', 1);
 // ----------------------------------------------------------------------
 // HTTP Server (shared by Express, Socket.IO, and WebSocket)
 // ----------------------------------------------------------------------
