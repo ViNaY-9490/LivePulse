@@ -45,7 +45,7 @@
  * Fallback server URL used when no environment variable is set.
  * Assumes the default backend runs locally on port 5001.
  */
-const DEFAULT_SERVER_URL = 'http://localhost:5001';
+const DEFAULT_SERVER_URL = 'https://livepulse-xvp1.onrender.com';
 
 // ----------------------------------------------------------------------
 // URL Sanitisation Helpers
