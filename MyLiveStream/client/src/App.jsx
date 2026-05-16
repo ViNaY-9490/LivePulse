@@ -60,6 +60,7 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
+import OAuthSuccess from './components/OAuthSuccess';
 import { setCredentials, logout } from './redux/authSlice';
 import {
   clearStoredAuth,
@@ -286,6 +287,11 @@ function App() {
             element={
               !isAuthenticated ? <LoginPage /> : <Navigate to="/dashboard" />
             }
+            
+          />
+          <Route
+            path="/oauth-success"
+            element={<OAuthSuccess />}
           />
           <Route
             path="/signup"
