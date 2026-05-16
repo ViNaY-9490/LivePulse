@@ -113,7 +113,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
          */
         callbackURL:
           GOOGLE_CALLBACK_URL ||
-          `http://localhost:${PORT}/api/auth/google/callback`,
+          `https://thelivepulse.netlify.app/api/auth/google/callback`,
       },
 
       /**
