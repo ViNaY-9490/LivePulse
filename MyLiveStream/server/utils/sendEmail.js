@@ -105,8 +105,8 @@ const createTransporter = () => {
    */
   return nodemailer.createTransport({
     host: EMAIL_HOST,
-    port: EMAIL_PORT,
-    secure: EMAIL_PORT === 465,
+    port: Number(EMAIL_PORT),
+    secure: Number(EMAIL_PORT) === 465,
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_PASS,
