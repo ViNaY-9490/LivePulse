@@ -359,7 +359,18 @@ const login = asyncHandler(async (req, res) => {
   // Assign OTP for 2FA
   const otp = assignOtp(user);
   await user.save();
+  console.log('before send otp');
+  try {
   await sendOTP(user.email, otp);
+} catch (err) {
+  console.error("SEND OTP ERROR:", err);
+
+  return res.status(500).json({
+    message: "Failed to send OTP email",
+    error: err.message,
+  });
+}
+console.log('after send otp');
 
   return res.json({
     message: 'OTP sent to your email',
