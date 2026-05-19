@@ -1,175 +1,89 @@
-/**
- * -------------------------------------------------------
- * File: utils/sendEmail.js
- * Purpose:
- * Sends transactional emails using Nodemailer and SMTP.
- * Currently used for OTP (one‑time password) delivery
- * during signup and login verification flows.
- *
- * This module is the single place where email transport
- * is configured. If the email provider changes (e.g., from
- * SMTP to SendGrid or AWS SES), only this file needs to
- * be updated.
- *
- * High‑Level Workflow:
- * 1. `createTransporter()` creates a reusable Nodemailer
- *    transport configured from environment variables.
- * 2. `sendOTP(to, otp)` sends an OTP email to the specified
- *    address using a pre‑formatted HTML template.
- *
- * Design Decisions:
- * - **Transporter created per‑send:** A new transporter is
- *   created each time `sendOTP` is called. For low‑volume
- *   email (auth only), this is fine. For high‑volume email,
- *   the transporter should be created once at module scope
- *   and reused. Nodemailer handles connection pooling
- *   automatically for reused transporters.
- * - **`secure: EMAIL_PORT === 465`:** Port 465 uses implicit
- *   TLS (SSL). Port 587 uses STARTTLS (explicit TLS upgrade).
- *   This is the Nodemailer convention.
- * - **Error handling delegated to caller:** `sendOTP` throws
- *   on failure. The caller (auth controller) catches the
- *   error and handles it (e.g., rolling back user creation).
- *   This keeps the email module focused on sending and the
- *   controller focused on business logic.
- *
- * Security Notes:
- * - Email credentials (`EMAIL_USER`, `EMAIL_PASS`) are
- *   stored in environment variables, never in code.
- * - For Gmail, use an "App Password" rather than the
- *   account's main password.
- *
- * Edge Cases Handled:
- * - **Email not configured** → `createTransporter` throws
- *   immediately with a clear error, preventing undefined
- *   behaviour downstream.
- * - **All email config present but invalid** → Nodemailer
- *   throws on `sendMail`; the error propagates to the caller.
- *
- * Dependencies:
- * - nodemailer: Email sending library
- * - ../config/env.js: SMTP configuration
- * -------------------------------------------------------
- */
-
-import nodemailer from 'nodemailer';
-import {
-  EMAIL_HOST,
-  EMAIL_PASS,
-  EMAIL_PORT,
-  EMAIL_USER,
-} from '../config/env.js';
-
-// ----------------------------------------------------------------------
-// Transporter Factory
-// ----------------------------------------------------------------------
+import https from 'https';
+import { BREVO_API_KEY, EMAIL_USER } from '../config/env.js';
 
 /**
- * Creates a Nodemailer transporter configured from environment
- * variables.
+ * Sends a 6-digit OTP to a user's email using the Brevo REST API.
+ * 
+ * This uses the Brevo (formerly Sendinblue) transactional email API.
+ * We use the native Node.js 'https' module to avoid extra dependencies 
+ * like axios or node-fetch, ensuring compatibility across environments 
+ * (like Render free tier) that might block certain ports or packages.
  *
- * Why a factory function instead of a module‑scoped transporter:
- * - Throws immediately if email is not configured, giving a
- *   clear error at the point of use.
- * - Allows the auth controller to catch configuration errors
- *   and return a proper response rather than crashing the server.
- * - For production, consider creating the transporter once at
- *   module scope and reusing it — Nodemailer handles connection
- *   pooling automatically for persistent transporters.
- *
- * @returns {import('nodemailer').Transporter} A configured transporter
- * @throws {Error} If any required email environment variable is missing
+ * @param {string} email - The recipient's email address.
+ * @param {string} otp - The 6-digit code to send.
+ * @returns {Promise<boolean>} - Resolves to true on success, or throws an error.
  */
-const createTransporter = () => {
-  /**
-   * Validate that all required email configuration is present.
-   *
-   * Why fail here rather than letting Nodemailer fail:
-   * Nodemailer's error messages for missing configuration are
-   * less clear. This gives a specific, actionable message.
-   */
-  if (!EMAIL_HOST || !EMAIL_USER || !EMAIL_PASS) {
-    throw new Error('Email delivery is not configured');
+export const sendOTP = async (email, otp) => {
+  // If the API key is missing, log the OTP for development and return.
+  // This allows the server to run locally without an email service.
+  if (!BREVO_API_KEY) {
+    console.log('=================================');
+    console.log('BREVO_API_KEY NOT SET');
+    console.log('OTP FOR TESTING:', otp);
+    console.log('EMAIL:', email);
+    console.log('=================================');
+    return true;
   }
 
-  /**
-   * Create the transporter.
-   *
-   * Configuration:
-   * - `host`: SMTP server hostname (e.g., smtp.gmail.com).
-   * - `port`: SMTP port (587 for STARTTLS, 465 for SSL).
-   * - `secure`: `true` for port 465 (implicit TLS), `false`
-   *   for port 587 (STARTTLS). This matches Nodemailer's
-   *   documented convention.
-   * - `auth`: Credentials for SMTP authentication.
-   */
-  return nodemailer.createTransport({
-    host: EMAIL_HOST,
-    port: EMAIL_PORT,
-    secure: EMAIL_PORT === 465,
-    auth: {
-      user: EMAIL_USER,
-      pass: EMAIL_PASS,
+  const data = JSON.stringify({
+    sender: {
+      name: 'LivePulse',
+      email: EMAIL_USER || 'noreply@livepulse.com',
     },
-  });
-};
-
-// ----------------------------------------------------------------------
-// OTP Email
-// ----------------------------------------------------------------------
-
-/**
- * Sends an OTP verification code to the specified email address.
- *
- * The email includes:
- * - The OTP code prominently displayed.
- * - The expiry duration (10 minutes) so the user knows the
- *   code is time‑limited.
- *
- * Why a dedicated function instead of a generic `sendEmail`:
- * - The OTP email template is specific to this use case.
- * - A generic `sendEmail` can be added later if other email
- *   types are needed (welcome emails, password reset, etc.).
- *
- * @param {string} to - Recipient email address
- * @param {string} otp - The 6‑digit OTP to include in the email
- * @returns {Promise<void>} Resolves when the email is sent
- * @throws {Error} If the transporter cannot be created or
- *   `sendMail` fails (e.g., invalid credentials, network error)
- *
- * @example
- * await sendOTP('user@example.com', '123456');
- */
-const sendOTP = async (to, otp) => {
-  const transporter = createTransporter();
-
-  /**
-   * Send the email.
-   *
-   * `from`: Uses the format `"Display Name" <email>` for
-   * better deliverability and user recognition.
-   *
-   * `html`: A simple, centred HTML template. Inline styles
-   * are used because many email clients strip `<style>` blocks.
-   */
-  await transporter.sendMail({
-    from: `"LivePulse" <${EMAIL_USER}>`,
-    to,
-    subject: 'Your LivePulse verification code',
-    html: `
-      <div style="text-align: center; font-family: Arial, sans-serif;">
-        <h1 style="color: #333;">Your OTP is:</h1>
-        <p style="font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #4F46E5;">
+    to: [{ email }],
+    subject: 'Your LivePulse Verification Code',
+    htmlContent: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+        <h2 style="color: #333; text-align: center;">Welcome to LivePulse</h2>
+        <p style="font-size: 16px; color: #555;">To complete your verification, please use the following One-Time Password (OTP):</p>
+        <div style="background: #f4f4f4; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #000; margin: 20px 0; border-radius: 5px;">
           ${otp}
-        </p>
-        <p style="color: #666;">It expires in 10 minutes.</p>
+        </div>
+        <p style="font-size: 14px; color: #777;">This code is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; 2026 LivePulse Streaming. All rights reserved.</p>
       </div>
     `,
   });
+
+  const options = {
+    hostname: 'api.brevo.com',
+    port: 443,
+    path: '/v3/smtp/email',
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': BREVO_API_KEY,
+      'content-type': 'application/json',
+      'content-length': Buffer.byteLength(data),
+    },
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let responseBody = '';
+
+      res.on('data', (chunk) => {
+        responseBody += chunk;
+      });
+
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log(`[Email] OTP sent successfully to ${email}`);
+          resolve(true);
+        } else {
+          console.error(`[Email] Brevo API Error (${res.statusCode}):`, responseBody);
+          reject(new Error(`Brevo API returned ${res.statusCode}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      console.error('[Email] Request Error:', error);
+      reject(error);
+    });
+
+    req.write(data);
+    req.end();
+  });
 };
-
-// ----------------------------------------------------------------------
-// Exports
-// ----------------------------------------------------------------------
-
-export { sendOTP };

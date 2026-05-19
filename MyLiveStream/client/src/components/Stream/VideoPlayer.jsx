@@ -118,6 +118,7 @@ const VideoPlayer = ({ streamId }) => {
   const sourceBufferRef = useRef(null); // Single SourceBuffer
   const wsRef = useRef(null); // WebSocket for media data
   const queueRef = useRef([]); // Pending chunks when buffer is busy
+  const retryTimeoutRef = useRef(null);
 
   /**
    * Tracks whether the SourceBuffer has received at least one
@@ -147,6 +148,7 @@ const VideoPlayer = ({ streamId }) => {
   const [isPaused, setIsPaused] = useState(false);
   const [viewers, setViewers] = useState(0);
   const [error, setError] = useState(null);
+  const [reconnectKey, setReconnectKey] = useState(0);
 
   // --------------------------------------------------------------------
   // Main Media Pipeline Effect
@@ -185,6 +187,11 @@ const VideoPlayer = ({ streamId }) => {
     // ------------------------------------------------------------------
     // Playback Helpers
     // ------------------------------------------------------------------
+
+    const triggerReconnect = () => {
+      if (disposed) return;
+      setReconnectKey(prev => prev + 1);
+    };
 
     /**
      * Attempts to start video playback. Handles the case where
@@ -278,7 +285,7 @@ const VideoPlayer = ({ streamId }) => {
 
     /**
      * Attempts to append a chunk directly to the SourceBuffer.
-     * If the buffer is busy or not ready, the chunk is queued
+     * If the buffer is busy or not ready, the chunk is qeued
      * instead.
      *
      * @param {ArrayBuffer} chunk - Raw media data
@@ -388,16 +395,27 @@ const VideoPlayer = ({ streamId }) => {
           appendChunk(event.data);
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
           if (disposed) return;
-          setIsWaiting(false);
-          setError((currentError) => currentError || 'Stream connection closed.');
+          
+          // If closed gracefully by server or by us (stream ended/restarted), 
+          // don't auto-retry here; signalling events handle that.
+          if (event.code === 1000 || event.code === 1001) return;
+
+          console.warn('[Player] Media WebSocket closed unexpectedly. Retrying in 3s...');
+          setIsWaiting(true);
+          
+          // Clear any existing timeout
+          if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+          
+          retryTimeoutRef.current = setTimeout(() => {
+            triggerReconnect();
+          }, 3000);
         };
 
         ws.onerror = () => {
           if (disposed) return;
-          setIsWaiting(false);
-          setError('Stream connection failed.');
+          console.error('[Player] Media WebSocket error.');
         };
       } catch (err) {
         setIsWaiting(false);
@@ -418,6 +436,17 @@ const VideoPlayer = ({ streamId }) => {
       setIsWaiting(false);
       setError('Stream has ended.');
       wsRef.current?.close();
+    };
+
+    /**
+     * Called when the broadcaster reconnects or restarts the stream.
+     * We perform a "hard reset" by incrementing reconnectKey, 
+     * which re-runs this entire useEffect.
+     */
+    const handleStreamRestarted = (payload) => {
+      if (payload?.streamId && payload.streamId !== streamId) return;
+      console.log('[Player] Stream restarted. Performing hard reset...');
+      triggerReconnect();
     };
 
     const handleStreamPaused = (payload) => {
@@ -465,40 +494,50 @@ const VideoPlayer = ({ streamId }) => {
     socket.emit('join-stream', streamId);
     socket.on('viewer-count', handleViewerCount);
     socket.on('stream-ended', handleStreamEnded);
+    socket.on('stream-restarted', handleStreamRestarted);
     socket.on('stream-paused', handleStreamPaused);
     socket.on('stream-resumed', handleStreamResumed);
 
     // ------------------------------------------------------------------
-    // Latency Monitor (Adaptive Sync)
+    // Latency Monitor (Adaptive Sync) & Buffer Eviction
     // ------------------------------------------------------------------
 
     /**
-     * Runs every second to keep playback close to the live edge.
-     *
-     * Strategy:
-     * - If latency > 1.5s → seek forward to 0.5s behind the buffer end.
-     * - If latency > 1.0s → subtly speed up playback (1.1×).
-     * - Otherwise → normal speed (1.0×).
-     *
-     * This provides a smooth, gradual correction without
-     * jarring jumps for minor drift.
+     * Runs every second to keep playback close to the live edge
+     * and prevent the SourceBuffer from growing indefinitely.
      */
     const monitor = setInterval(() => {
       const video = videoRef.current;
+      const sourceBuffer = sourceBufferRef.current;
       if (!video || video.buffered.length === 0) return;
 
       const lastBuffered = video.buffered.end(video.buffered.length - 1);
+      const firstBuffered = video.buffered.start(0);
       const latency = lastBuffered - video.currentTime;
 
+      // ---- Latency Correction ----
       if (latency > 1.5) {
-        // Significant drift: jump closer to live.
         video.currentTime = Math.max(0, lastBuffered - 0.5);
       } else if (latency > 1.0) {
-        // Moderate drift: accelerate playback subtly.
         video.playbackRate = 1.1;
       } else {
-        // Within tolerance: normal speed.
         video.playbackRate = 1.0;
+      }
+
+      // ---- Buffer Eviction (Memory Management) ----
+      // If we have more than 60 seconds of buffered data behind us,
+      // remove it to prevent QuotaExceededError.
+      if (
+        sourceBuffer &&
+        !sourceBuffer.updating &&
+        video.currentTime - firstBuffered > 60
+      ) {
+        try {
+          // Remove from start of buffer up to 30s before current playhead
+          sourceBuffer.remove(0, video.currentTime - 30);
+        } catch (err) {
+          console.warn('[Player] Buffer eviction failed:', err.message);
+        }
       }
     }, 1000);
 
@@ -509,11 +548,13 @@ const VideoPlayer = ({ streamId }) => {
     return () => {
       disposed = true;
       clearInterval(monitor);
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
 
       // Notify server we're leaving.
       socket.emit('leave-stream', streamId);
       socket.off('viewer-count', handleViewerCount);
       socket.off('stream-ended', handleStreamEnded);
+      socket.off('stream-restarted', handleStreamRestarted);
       socket.off('stream-paused', handleStreamPaused);
       socket.off('stream-resumed', handleStreamResumed);
 
@@ -561,7 +602,7 @@ const VideoPlayer = ({ streamId }) => {
       mediaSourceRef.current = null;
       queueRef.current = [];
     };
-  }, [socket, streamId]);
+  }, [socket, streamId, reconnectKey]);
 
   // --------------------------------------------------------------------
   // Manual Sync Handler

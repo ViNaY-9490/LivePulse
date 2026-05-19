@@ -225,6 +225,9 @@ export const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL;
 // Email (for OTP delivery)
 // ----------------------------------------------------------------------
 
+/** Brevo (formerly Sendinblue) API Key for sending emails via REST API. */
+export const BREVO_API_KEY = process.env.BREVO_API_KEY;
+
 /** SMTP server hostname (e.g., smtp.gmail.com). */
 export const EMAIL_HOST = process.env.EMAIL_HOST;
 
@@ -288,6 +291,7 @@ const requiredInProduction = {
   JWT_ACCESS_SECRET,
   JWT_REFRESH_SECRET,
   CLIENT_URL,
+  BREVO_API_KEY,
 };
 
 /**
