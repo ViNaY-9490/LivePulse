@@ -113,7 +113,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
          */
        callbackURL:
   GOOGLE_CALLBACK_URL ||
-  `https://livepulse-xvp1.onrender.com/api/auth/google/callback`,
+  `http://localhost:${PORT}/api/auth/google/callback`,
       },
 
       /**

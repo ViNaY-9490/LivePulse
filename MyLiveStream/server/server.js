@@ -168,9 +168,9 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
   'http://localhost:5173',
   'http://localhost:5174',
+  'http://127.0.0.1:5174',
   'https://the-live-pulse.vercel.app',
   'https://thelivepulse.netlify.app',
-  'http://127.0.0.1:5174',
   ...CORS_ORIGINS,
 ].filter(Boolean);
 
@@ -184,8 +184,15 @@ const allowedOrigins = [
  * @param {string|null} origin - The request's Origin header
  * @returns {boolean} True if the origin is allowed
  */
-const isAllowedOrigin = (origin) =>
-  !origin || allowedOrigins.includes(origin);
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  
+  // Allow any subdomains of allowed origins if needed, or 
+  // patterns. For now, we stick to strict matching but 
+  // ensure common dev/prod URLs are present.
+  return false;
+};
 
 /**
  * CORS options for Express, Socket.IO, and WebSocket.
@@ -204,7 +211,7 @@ const corsOptions = {
     }
 
     // Log blocked origins for monitoring and debugging
-    console.warn('[CORS] Blocked origin:', origin);
+    console.warn(`[CORS] Blocked origin: ${origin || 'Unknown'}`);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -409,7 +416,13 @@ wss.on('connection', (ws, req) => {
     console.log(`[WS] Broadcaster connected: ${streamId}`);
 
     // Create or update the session with this broadcaster WebSocket
-    ensureStreamSession(streamId, { broadcaster: ws });
+    ensureStreamSession(streamId, { 
+      broadcaster: ws,
+      initSegment: null // Reset segment on new broadcaster connection
+    });
+
+    // Notify viewers that the stream has "restarted" (new init segment incoming)
+    io.to(streamId).emit('stream-restarted', { streamId });
 
     /**
      * Relay media data from the broadcaster to all viewers.
