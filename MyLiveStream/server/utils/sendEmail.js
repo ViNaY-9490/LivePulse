@@ -107,6 +107,7 @@ const createTransporter = () => {
     host: EMAIL_HOST,
     port: Number(EMAIL_PORT),
     secure: Number(EMAIL_PORT) === 465,
+    family: 4, // Use IPv4 to avoid potential IPv6 issues
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_PASS,
