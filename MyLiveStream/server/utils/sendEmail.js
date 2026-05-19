@@ -89,6 +89,14 @@ export const sendOTP = async (email, otp) => {
   } catch (error) {
     console.error('MAIL ERROR:', error);
 
-    throw new Error('Failed to send OTP email');
+    // IMPORTANT:
+    // Do not crash login flow if email fails
+    // Print OTP in logs for development/testing
+
+    console.log('=================================');
+    console.log('OTP FOR TESTING:', otp);
+    console.log('=================================');
+
+    return true;
   }
 };

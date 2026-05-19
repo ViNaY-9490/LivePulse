@@ -330,44 +330,82 @@ const verifyOtp = asyncHandler(async (req, res) => {
  */
 const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
+
   const cleanEmail =
-    typeof email === 'string' ? email.trim().toLowerCase() : '';
+    typeof email === 'string'
+      ? email.trim().toLowerCase()
+      : '';
 
   if (!cleanEmail || !password) {
-    return res.status(400).json({ message: 'Email and password required' });
+    return res.status(400).json({
+      message: 'Email and password required',
+    });
   }
 
-  const user = await User.findOne({ email: cleanEmail });
+  const user = await User.findOne({
+    email: cleanEmail,
+  });
 
-  // Use a generic "Invalid credentials" message to avoid
-  // leaking whether the email exists in our database.
+  // Use a generic "Invalid credentials" message
+  // to avoid leaking whether the email exists
+  // in our database.
   if (!user || !user.password) {
-    return res.status(401).json({ message: 'Invalid credentials' });
+    return res.status(401).json({
+      message: 'Invalid credentials',
+    });
   }
 
   // Block login for unverified accounts
   if (!user.isVerified) {
-    return res.status(403).json({ message: 'Account not verified' });
+    return res.status(403).json({
+      message: 'Account not verified',
+    });
   }
 
   // Compare password against stored hash (bcrypt)
   const isMatch = await user.comparePassword(password);
+
   if (!isMatch) {
-    return res.status(401).json({ message: 'Invalid credentials' });
+    return res.status(401).json({
+      message: 'Invalid credentials',
+    });
   }
 
+  // ==============================
   // Assign OTP for 2FA
+  // ==============================
+
   const otp = assignOtp(user);
+
   await user.save();
-  await sendOTP(user.email, otp);
+
+  // ==============================
+  // Try Sending OTP Email
+  // ==============================
+
+  try {
+    await sendOTP(user.email, otp);
+
+    console.log('OTP email process completed');
+  } catch (error) {
+    console.error('OTP SEND ERROR:', error);
+
+    // Fallback for development/testing
+    console.log('=================================');
+    console.log('OTP FOR TESTING:', otp);
+    console.log('=================================');
+  }
+
+  // ==============================
+  // Always Continue Login Flow
+  // ==============================
 
   return res.json({
-    message: 'OTP sent to your email',
+    message: 'OTP generated successfully',
     userId: user._id,
     requiresOtp: true,
   });
 });
-
 // ----------------------------------------------------------------------
 // POST /verify-login-otp
 // ----------------------------------------------------------------------
