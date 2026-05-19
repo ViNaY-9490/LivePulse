@@ -14,7 +14,7 @@ const createTransporter = () => {
     port: Number(process.env.EMAIL_PORT),
 
     // Use secure connection only for port 465
-    secure: Number(process.env.EMAIL_PORT) === 465,
+    secure: false,
 
     // Force IPv4 to avoid potential IPv6 issues
     family: 4,
@@ -34,6 +34,10 @@ const createTransporter = () => {
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 10000,
+
+    // Enable SMTP debugging
+    logger: true,
+    debug: true,
   });
 };
 
@@ -45,6 +49,13 @@ export const sendOTP = async (email, otp) => {
   try {
     // Create transporter
     const transporter = createTransporter();
+
+    console.log('Verifying SMTP connection...');
+
+    // Verify SMTP connection
+    await transporter.verify();
+
+    console.log('SMTP server is ready');
 
     console.log('Sending OTP email...');
 
@@ -72,7 +83,7 @@ export const sendOTP = async (email, otp) => {
     });
 
     console.log('OTP email sent successfully');
-    console.log(info.messageId);
+    console.log('Message ID:', info.messageId);
 
     return info;
   } catch (error) {
