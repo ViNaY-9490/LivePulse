@@ -1,8 +1,8 @@
+import nodemailer from 'nodemailer';
+
 // ==============================
 // Nodemailer / Mailtrap Config
 // ==============================
-
-const nodemailer = require('nodemailer');
 
 // Create reusable transporter object using Mailtrap SMTP
 const createTransporter = () => {
@@ -41,7 +41,7 @@ const createTransporter = () => {
 // Send OTP Email Function
 // ==============================
 
-const sendOTP = async (email, otp) => {
+export const sendOTP = async (email, otp) => {
   try {
     // Create transporter
     const transporter = createTransporter();
@@ -81,5 +81,3 @@ const sendOTP = async (email, otp) => {
     throw new Error('Failed to send OTP email');
   }
 };
-
-module.exports = sendOTP;
