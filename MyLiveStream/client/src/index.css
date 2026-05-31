@@ -181,7 +181,7 @@
  * Set to transparent so it blends with the container background.
  */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
 }
 
 ::-webkit-scrollbar-track {
